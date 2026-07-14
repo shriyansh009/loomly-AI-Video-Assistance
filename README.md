@@ -277,8 +277,5 @@ This project is licensed under the MIT License - see LICENSE file for details.
 
 ## 👥 Authors
 
-AI Video Assistant Development Team
+Shriyansh Fasate
 
-## 📧 Support
-
-For issues and questions, please create an issue in the repository.
