@@ -12,6 +12,8 @@ import {
   Menu,
   X,
   Trash2,
+  CircleQuestionMark,
+  Ghost,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -25,7 +27,10 @@ import {
   deleteConversation,
   getConversation,
 } from "@/lib/conversations";
-import { getMessages, sendMessage } from "@/lib/messages";
+import { getMessages } from "@/lib/messages";
+import { chat } from "@/lib/chat";
+
+
 
 export const Route = createFileRoute("/dashboard")({
   head: () => ({ meta: [{ title: "Dashboard — Loomly" }] }),
@@ -185,6 +190,10 @@ function DashboardPage() {
     navigate({ to: "/login" });
   };
 
+  const onContact =()=> {
+    navigate({to:"/contact"})
+  }
+
   const onPickFile = () => fileRef.current?.click();
 
   const onFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -314,17 +323,7 @@ function DashboardPage() {
     );
 
     try {
-      await sendMessage(conversationId, text);
-
-      const transcript =
-        activeConversation?.transcript && activeConversation.transcript.trim()
-          ? activeConversation.transcript
-          : nextMsgs
-              .filter((message) => message.content)
-              .map((message) => `${message.role === "user" ? "User" : "Assistant"}: ${message.content}`)
-              .join("\n");
-
-      const response = await askLLM(text, transcript || text, conversationId);
+      const response = await chat(conversationId, text);
 
       setConvos((current) =>
         current.map((conversation) =>
@@ -445,8 +444,8 @@ function DashboardPage() {
           >
             <Menu className="h-4 w-4" />
           </Button>
-          <div className="min-w-0 flex-1 truncate text-sm font-medium">
-            {activeConversation?.title ?? "New chat"}
+          <div className="min-w-0 flex-2 truncate text-sm font-medium">
+             {activeConversation?.title ?? "New chat"}
           </div>
           {activeConversation?.fileName && (
             <div className="hidden items-center gap-2 rounded-full border border-border bg-muted/40 px-3 py-1 text-xs text-muted-foreground sm:flex">
@@ -454,6 +453,9 @@ function DashboardPage() {
               <span className="max-w-[200px] truncate">{activeConversation.fileName}</span>
             </div>
           )}
+          <Button size="icon" variant='ghost' onClick={onContact} title="Contact">
+              <CircleQuestionMark className="h-4 w-4"/>
+            </Button>
         </header>
 
         <div ref={scrollRef} className="flex-1 overflow-y-auto">
