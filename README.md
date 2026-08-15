@@ -2,6 +2,10 @@
 
 A full-stack application that provides intelligent video analysis, transcription, and chat capabilities using AI/ML technologies.
 
+## ⚙️ Working
+
+![working image](images/working.png)
+
 ## 📋 Table of Contents
 
 - [Project Structure](#project-structure)
@@ -133,50 +137,149 @@ Frontend will be available at `http://localhost:5173`
 
 ```
 AI Video Assistance/
-├── backend/                    # FastAPI backend
+├── backend/                           # FastAPI backend server
 │   ├── app/
-│   │   ├── core/             # Core business logic
-│   │   │   ├── extractor.py
-│   │   │   ├── rag_engine.py
-│   │   │   ├── summarizer.py
-│   │   │   ├── transcriber.py
-│   │   │   └── vector_store.py
-│   │   ├── routers/          # API endpoints
-│   │   │   ├── chat.py
-│   │   │   ├── conversations.py
-│   │   │   ├── upload.py
-│   │   │   └── LLM.py
-│   │   ├── services/         # Business services
-│   │   │   ├── audio.py
-│   │   │   ├── chat_service.py
-│   │   │   ├── transcription_service.py
-│   │   │   └── upload_service.py
-│   │   ├── auth.py           # Authentication logic
-│   │   ├── models.py         # Database models
-│   │   ├── schemas.py        # Pydantic schemas
-│   │   └── main.py           # FastAPI app entry
-│   ├── tests/                # Unit tests
-│   ├── uploads/              # Uploaded files
-│   ├── vector_db/            # Vector database storage
-│   └── requirements.txt
+│   │   ├── core/                     # Core AI/ML functionality
+│   │   │   ├── extractor.py          # Extract metadata from videos
+│   │   │   ├── rag_engine.py         # Retrieval-Augmented Generation engine
+│   │   │   ├── summarizer.py         # Generate summaries using LLM
+│   │   │   ├── transcriber.py        # Handle transcription requests
+│   │   │   ├── vector_store.py       # Vector database operations
+│   │   │   └── __init__.py
+│   │   │
+│   │   ├── routers/                  # API route handlers
+│   │   │   ├── chat.py               # Chat message endpoints
+│   │   │   ├── conversations.py      # Conversation management endpoints
+│   │   │   ├── upload.py             # Video upload endpoints
+│   │   │   ├── messages.py           # Message history endpoints
+│   │   │   ├── LLM.py                # LLM interaction endpoints
+│   │   │   └── __init__.py
+│   │   │
+│   │   ├── services/                 # Business logic layer
+│   │   │   ├── audio.py              # Audio processing utilities
+│   │   │   ├── chat_service.py       # Chat conversation logic
+│   │   │   ├── chunking.py           # Text chunking for embeddings
+│   │   │   ├── transcription_service.py  # Transcription orchestration
+│   │   │   ├── upload_service.py     # Video upload handling
+│   │   │   ├── youtube_service.py    # YouTube integration
+│   │   │   └── __init__.py
+│   │   │
+│   │   ├── auth.py                   # JWT authentication & authorization
+│   │   ├── database.py               # Database connection & session management
+│   │   ├── models.py                 # SQLAlchemy ORM models
+│   │   ├── schemas.py                # Pydantic request/response schemas
+│   │   ├── enums.py                  # Enumeration types
+│   │   ├── main.py                   # FastAPI application entry point
+│   │   └── __init__.py
+│   │
+│   ├── tests/                        # Test suite
+│   │   ├── test_auth.py              # Authentication tests
+│   │   ├── test_chat_logic.py        # Chat functionality tests
+│   │   ├── test_youtube_upload.py    # YouTube upload tests
+│   │   ├── vector_retrive_test.py    # Vector retrieval tests
+│   │   └── youtube_transcription.py  # Transcription tests
+│   │
+│   ├── uploads/                      # Temporary storage for uploaded videos
+│   ├── vector_db/                    # Chroma vector database storage
+│   │   ├── chroma.sqlite3            # Main vector DB
+│   │   └── conversation_*/           # Conversation-specific embeddings
+│   │
+│   ├── requirements.txt              # Python dependencies
+│   ├── README.md                     # Backend documentation
+│   ├── test_auth.py                  # Quick authentication test
+│   └── verify_auth.py                # Auth verification script
 │
-├── frontend/                   # React/Vite frontend
+├── frontend/                         # React + TypeScript frontend
 │   ├── src/
-│   │   ├── components/       # React components
-│   │   │   └── ui/          # UI components
-│   │   ├── routes/          # Page components
-│   │   ├── lib/             # Utilities and helpers
-│   │   │   ├── api.ts       # API calls
-│   │   │   ├── auth.ts      # Auth utilities
-│   │   │   └── chat.ts      # Chat utilities
-│   │   ├── hooks/           # Custom React hooks
-│   │   └── styles/          # Global styles
-│   ├── public/              # Static files
-│   ├── vite.config.ts
-│   └── package.json
+│   │   ├── components/               # Reusable React components
+│   │   │   ├── ui/                  # Shadcn/ui component library
+│   │   │   │   ├── button.tsx
+│   │   │   │   ├── card.tsx
+│   │   │   │   ├── dialog.tsx
+│   │   │   │   ├── form.tsx
+│   │   │   │   ├── input.tsx
+│   │   │   │   └── ... (other UI components)
+│   │   │   └── __init__.ts
+│   │   │
+│   │   ├── routes/                   # Page components (TanStack Router)
+│   │   │   ├── __root.tsx            # Root layout
+│   │   │   ├── index.tsx             # Home/landing page
+│   │   │   ├── login.tsx             # Login page
+│   │   │   ├── signup.tsx            # User registration page
+│   │   │   ├── dashboard.tsx         # Main dashboard
+│   │   │   ├── contact.tsx           # Contact page
+│   │   │   └── README.md
+│   │   │
+│   │   ├── lib/                      # Utilities & helpers
+│   │   │   ├── api.ts                # API client wrapper
+│   │   │   ├── auth.ts               # Authentication helpers
+│   │   │   ├── chat.ts               # Chat-related utilities
+│   │   │   ├── conversations.ts      # Conversation management
+│   │   │   ├── messages.ts           # Message handling
+│   │   │   ├── utils.ts              # Common utilities
+│   │   │   ├── error-capture.ts      # Error handling
+│   │   │   ├── error-page.ts         # Error page utilities
+│   │   │   └── lovable-error-reporting.ts
+│   │   │
+│   │   ├── hooks/                    # Custom React hooks
+│   │   │   └── use-mobile.tsx        # Mobile responsiveness hook
+│   │   │
+│   │   ├── router.tsx                # Router configuration
+│   │   ├── routeTree.gen.ts          # Auto-generated route tree
+│   │   ├── server.ts                 # Server configuration
+│   │   ├── start.ts                  # Application startup
+│   │   └── styles.css                # Global styles
+│   │
+│   ├── public/                       # Static assets
+│   │   └── (images, icons, etc.)
+│   │
+│   ├── components.json               # UI component configuration
+│   ├── vite.config.ts                # Vite build configuration
+│   ├── tsconfig.json                 # TypeScript configuration
+│   ├── eslint.config.js              # Linting rules
+│   ├── bunfig.toml                   # Bun configuration
+│   ├── package.json                  # Dependencies & scripts
+│   ├── AGENTS.md                     # Custom agent definitions
+│   └── README.md                     # Frontend documentation
 │
-└── README.md
+├── PROJECT_OVERVIEW.md               # High-level project overview
+├── project_structure.md              # Detailed structure documentation
+├── working.md                        # Development notes
+└── README.md                         # This file
 ```
+
+### Directory Details
+
+**Backend (`/backend`)**
+- **core/**: AI/ML processing pipeline components
+  - Handles video transcription, embedding generation, RAG operations
+  - Manages vector store for semantic search capabilities
+  
+- **routers/**: FastAPI route handlers
+  - Maps HTTP requests to service layer functions
+  - Handles request validation and response formatting
+  
+- **services/**: Business logic implementation
+  - Orchestrates core functionality for various features
+  - Integrates external services (transcription APIs, LLMs)
+  
+- **uploads/ & vector_db/**: Data storage
+  - Stores uploaded videos and vector embeddings
+  - Maintains conversation-specific vector indices
+
+**Frontend (`/frontend`)**
+- **components/**: Reusable UI building blocks
+  - Shadcn/ui components provide consistent design system
+  - Custom components wrap business logic
+  
+- **routes/**: Page-level components
+  - Each file represents a distinct page/route
+  - Uses TanStack Router for client-side routing
+  
+- **lib/**: API integration and utilities
+  - Centralized API client for backend communication
+  - Authentication token management
+  - Business logic helpers (chat, conversations, messages)
 
 ## 🔌 API Endpoints
 

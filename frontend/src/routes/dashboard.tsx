@@ -1,5 +1,7 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import {
   Sparkles,
   Plus,
@@ -19,7 +21,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "sonner";
-import { getDashboard, askLLM, uploadFile } from "@/lib/api";
+import { getDashboard, askLLM, uploadFile, uploadYouTubeUrl, isYouTubeUrl } from "@/lib/api";
 import {
   getConversations,
   createConversation,
@@ -48,6 +50,7 @@ type Conversation = {
   messages: Msg[];
   fileName?: string;
   transcript?: string;
+  videoUrl?: string;
 };
 type ApiConversation = {
   id: number;
@@ -79,6 +82,65 @@ function toMessage(message: ApiMessage): Msg {
   };
 }
 
+function getYouTubeEmbedUrl(url: string, startSeconds?: number): string | null {
+  try {
+    const parsed = new URL(url);
+    const host = parsed.hostname.toLowerCase().replace(/^www\./, "");
+    let embedUrl: string | null = null;
+
+    if (host === "youtu.be") {
+      const id = parsed.pathname.slice(1);
+      embedUrl = id ? `https://www.youtube.com/embed/${id}` : null;
+    }
+
+    if (host === "youtube.com" || host === "m.youtube.com" || host.endsWith(".youtube.com")) {
+      const videoId = parsed.searchParams.get("v");
+      if (videoId) embedUrl = `https://www.youtube.com/embed/${videoId}`;
+
+      const shortsMatch = parsed.pathname.match(/^\/shorts\/([^/?]+)/);
+      if (shortsMatch?.[1]) embedUrl = `https://www.youtube.com/embed/${shortsMatch[1]}`;
+    }
+
+    if (!embedUrl) return null;
+
+    const urlObj = new URL(embedUrl);
+    if (typeof startSeconds === "number" && Number.isFinite(startSeconds)) {
+      urlObj.searchParams.set("start", String(Math.max(0, Math.floor(startSeconds))));
+    }
+
+    return urlObj.toString();
+  } catch {
+    return null;
+  }
+}
+
+function parseTranscriptTimeline(transcript?: string) {
+  if (!transcript) return [];
+
+  const lines = transcript.split(/\r?\n/);
+
+  return lines
+    .map((line) => {
+      const match = line.match(/\[(\d{1,2}):(\d{2}):(\d{2})\]/);
+      if (!match) return null;
+
+      const [, hour, minute, second] = match;
+      const seconds = Number(hour) * 3600 + Number(minute) * 60 + Number(second);
+      const text = line.replace(/\[\d{1,2}:\d{2}:\d{2}\]\s*/, "").trim();
+
+      if (!text) return null;
+
+      return {
+        seconds,
+        text,
+        label: `${String(Math.floor(seconds / 3600)).padStart(2, "0")}:${String(
+          Math.floor((seconds % 3600) / 60),
+        ).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`,
+      };
+    })
+    .filter(Boolean) as Array<{ seconds: number; text: string; label: string }>;
+}
+
 function DashboardPage() {
   const navigate = useNavigate();
   const [session, setSess] = useState<Session | null>(null);
@@ -88,6 +150,8 @@ function DashboardPage() {
   const [sending, setSending] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [playingVideoUrl, setPlayingVideoUrl] = useState<string | null>(null);
+  const [timelineQuery, setTimelineQuery] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -160,6 +224,25 @@ function DashboardPage() {
       behavior: "smooth",
     });
   }, [activeConversation?.messages.length]);
+
+  useEffect(() => {
+    setPlayingVideoUrl(null);
+    setTimelineQuery("");
+  }, [activeConversation?.id]);
+
+  const timelineMatches = useMemo(() => {
+    const q = timelineQuery.trim();
+    if (!q || !activeConversation?.transcript) return [];
+
+    const pattern = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+    return parseTranscriptTimeline(activeConversation.transcript).filter((segment) => pattern.test(segment.text));
+  }, [activeConversation?.transcript, timelineQuery]);
+
+  const timelineMaxSeconds = useMemo(() => {
+    const transcriptEntries = parseTranscriptTimeline(activeConversation?.transcript);
+    if (!transcriptEntries.length) return 0;
+    return Math.max(...transcriptEntries.map((entry) => entry.seconds));
+  }, [activeConversation?.transcript]);
 
   if (!session) return null;
 
@@ -290,6 +373,8 @@ function DashboardPage() {
     const text = input.trim();
     if (!text || sending) return;
 
+    const isYoutubeLink = isYouTubeUrl(text);
+
     let conversationId = activeConversation?.id;
     if (!conversationId) {
       try {
@@ -304,10 +389,82 @@ function DashboardPage() {
       }
     }
 
-    const nextMsgs: Msg[] = [
-      ...(activeConversation?.messages ?? []),
-      { role: "user", content: text },
-    ];
+    const baseMessages: Msg[] = activeConversation?.messages ?? [];
+    const nextMsgs: Msg[] = [...baseMessages, { role: "user", content: text }];
+
+    if (isYoutubeLink) {
+      const processingMessages: Msg[] = [
+        { role: "assistant", content: "Detected a YouTube link. Downloading the video and fetching the transcript..." },
+        { role: "assistant", content: "Processing transcript, indexing it into memory, and preparing chat context..." },
+      ];
+
+      setInput("");
+      setSending(true);
+      setConvos((current) =>
+        current.map((conversation) =>
+          conversation.id === conversationId
+            ? {
+                ...conversation,
+                messages: [...nextMsgs, ...processingMessages],
+              }
+            : conversation,
+        ),
+      );
+
+      try {
+        const result = await uploadYouTubeUrl(text, conversationId);
+        const summary = result?.summary ? String(result.summary).trim() : "";
+        const title = result?.title ? String(result.title).trim() : "YouTube video";
+
+        setConvos((current) =>
+          current.map((conversation) =>
+            conversation.id === conversationId
+              ? {
+                  ...conversation,
+                  title: title || conversation.title,
+                  fileName: text,
+                  videoUrl: text,
+                  transcript: result?.transcript || conversation.transcript || "",
+                  messages: [
+                    ...nextMsgs,
+                    {
+                      role: "assistant",
+                      content: summary
+                        ? `YouTube video processed successfully. Summary: ${summary}`
+                        : `YouTube video processed successfully and added to memory for chat.`,
+                    },
+                  ],
+                }
+              : conversation,
+          ),
+        );
+
+        toast.success("YouTube video processed");
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Unable to process the YouTube URL";
+        setConvos((current) =>
+          current.map((conversation) =>
+            conversation.id === conversationId
+              ? {
+                  ...conversation,
+                  messages: [
+                    ...nextMsgs,
+                    {
+                      role: "assistant",
+                      content: `I couldn’t process this YouTube link: ${message}`,
+                    },
+                  ],
+                }
+              : conversation,
+          ),
+        );
+        toast.error("Unable to process the YouTube URL");
+      } finally {
+        setSending(false);
+      }
+
+      return;
+    }
 
     setInput("");
     setSending(true);
@@ -460,6 +617,128 @@ function DashboardPage() {
 
         <div ref={scrollRef} className="flex-1 overflow-y-auto">
           <div className="mx-auto max-w-3xl px-4 py-8">
+            {activeConversation?.videoUrl && (
+              <div className="mb-6 rounded-2xl border border-border bg-card p-3 shadow-sm">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+                    <FileVideo className="h-4 w-4" />
+                    YouTube video
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() =>
+                      setPlayingVideoUrl((current) =>
+                        current === activeConversation.videoUrl ? null : activeConversation.videoUrl ?? null,
+                      )
+                    }
+                  >
+                    {playingVideoUrl === activeConversation.videoUrl ? "Hide video" : "Play video"}
+                  </Button>
+                </div>
+
+                <div className="mt-3 flex gap-2">
+                  <input
+                    type="text"
+                    value={timelineQuery}
+                    onChange={(e) => setTimelineQuery(e.target.value)}
+                    placeholder="Search transcript timeline..."
+                    className="h-9 flex-1 rounded-md border border-border bg-background px-3 text-sm text-foreground outline-none ring-0 placeholder:text-muted-foreground"
+                  />
+                  {timelineMatches.length > 0 && (
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => {
+                        const firstMatch = timelineMatches[0];
+                        if (!firstMatch) return;
+                        setPlayingVideoUrl(activeConversation.videoUrl ?? null);
+                        const embedUrl = getYouTubeEmbedUrl(activeConversation.videoUrl ?? "", firstMatch.seconds);
+                        if (embedUrl) {
+                          setPlayingVideoUrl(embedUrl);
+                        }
+                      }}
+                    >
+                      Jump to match
+                    </Button>
+                  )}
+                </div>
+
+                {timelineMatches.length > 0 && (
+                  <div className="mt-3 rounded-xl border border-border bg-muted/40 p-3">
+                    <div className="mb-2 flex items-center justify-between text-[11px] uppercase tracking-wide text-muted-foreground">
+                      <span>Timeline matches</span>
+                      <span>{timelineMatches.length} result{timelineMatches.length > 1 ? "s" : ""}</span>
+                    </div>
+
+                    <div className="relative mb-3 h-2 overflow-hidden rounded-full bg-border">
+                      <div className="absolute inset-y-0 left-0 bg-foreground/20" style={{ width: `${timelineMaxSeconds ? "100%" : "0%"}` }} />
+                      {timelineMatches.map((match, index) => {
+                        const left = timelineMaxSeconds > 0 ? (match.seconds / timelineMaxSeconds) * 100 : 0;
+                        return (
+                          <button
+                            key={`${match.seconds}-${index}`}
+                            type="button"
+                            onClick={() => {
+                              const embedUrl = getYouTubeEmbedUrl(activeConversation.videoUrl ?? "", match.seconds);
+                              if (embedUrl) setPlayingVideoUrl(embedUrl);
+                            }}
+                            className="absolute top-1/2 h-4 w-4 -translate-y-1/2 rounded-full border-2 border-background bg-amber-400 shadow-sm transition-transform hover:scale-110"
+                            style={{ left: `calc(${left}% - 8px)` }}
+                            title={`${match.label} • ${match.text}`}
+                            aria-label={`Jump to ${match.label}`}
+                          />
+                        );
+                      })}
+                    </div>
+
+                    <div className="space-y-2">
+                      {timelineMatches.slice(0, 5).map((match, index) => (
+                        <button
+                          key={`${match.seconds}-${index}`}
+                          type="button"
+                          onClick={() => {
+                            const embedUrl = getYouTubeEmbedUrl(activeConversation.videoUrl ?? "", match.seconds);
+                            if (embedUrl) setPlayingVideoUrl(embedUrl);
+                          }}
+                          className="block w-full rounded-lg border border-border bg-background/60 p-2 text-left transition-colors hover:bg-background"
+                        >
+                          <div className="mb-1 text-[11px] font-medium text-muted-foreground">{match.label}</div>
+                          <div className="text-sm text-foreground">
+                            {match.text.length > 140 ? `${match.text.slice(0, 140)}...` : match.text}
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {playingVideoUrl === activeConversation.videoUrl && (
+                  <div className="mt-3 overflow-hidden rounded-xl border border-border">
+                    <iframe
+                      src={getYouTubeEmbedUrl(activeConversation.videoUrl) ?? activeConversation.videoUrl}
+                      title="YouTube video"
+                      className="aspect-video w-full border-0"
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                      allowFullScreen
+                    />
+                  </div>
+                )}
+
+                {typeof playingVideoUrl === "string" && playingVideoUrl !== activeConversation.videoUrl && (
+                  <div className="mt-3 overflow-hidden rounded-xl border border-border">
+                    <iframe
+                      src={playingVideoUrl}
+                      title="YouTube video timeline match"
+                      className="aspect-video w-full border-0"
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                      allowFullScreen
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+
             {(!activeConversation || activeConversation.messages.length === 0) ? (
               <EmptyState onUpload={onPickFile} uploading={uploading} />
             ) : (
@@ -585,6 +864,7 @@ function EmptyState({ onUpload, uploading }: { onUpload: () => void; uploading: 
 
 function MessageBubble({ msg, name }: { msg: Msg; name: string }) {
   const isUser = msg.role === "user";
+
   return (
     <div className="flex gap-3">
       <div
@@ -598,7 +878,14 @@ function MessageBubble({ msg, name }: { msg: Msg; name: string }) {
         <div className="mb-1 text-xs font-medium text-muted-foreground">
           {isUser ? "You" : "Loomly"}
         </div>
-        <div className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">{msg.content}</div>
+
+        {isUser ? (
+          <div className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">{msg.content}</div>
+        ) : (
+          <div className="prose prose-sm max-w-none dark:prose-invert prose-headings:mt-4 prose-headings:mb-2 prose-p:my-2 prose-ul:my-2 prose-ol:my-2 prose-li:my-1 prose-pre:my-3 prose-code:before:content-none prose-code:after:content-none text-foreground">
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
+          </div>
+        )}
       </div>
     </div>
   );

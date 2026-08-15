@@ -21,22 +21,28 @@ VECTOR_DB_DIR = "vector_db"
 def process_uploaded_file(
     db: Session,
     conversation: Conversation,
-    file_path: str,
+    file_path: str | None,
+    transcript_text: str | None = None,
 ):
     """
     Complete upload pipeline.
 
-    1. Transcribe
+    1. Transcribe or reuse transcript text
     2. Summarize
     3. Extract meeting insights
     4. Build vector database
     5. Update conversation
     """
 
-    # -------------------------
-    # Transcribe
-    # -------------------------
-    transcript = transcribe(file_path)
+    if transcript_text is not None:
+        transcript = transcript_text.strip()
+    else:
+        if not file_path:
+            raise ValueError("A file path or transcript text is required.")
+        transcript = transcribe(file_path)
+
+    if not transcript:
+        raise ValueError("No transcript content was generated for this upload.")
 
     # -------------------------
     # Summary

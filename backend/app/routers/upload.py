@@ -16,7 +16,7 @@ from ..auth import get_current_user
 from ..database import get_db
 from ..models import Conversation, User
 from ..services.upload_service import process_uploaded_file
-from ..services.youtube_service import download_youtube_audio
+from ..services.youtube_service import download_youtube_content
 
 router = APIRouter(
     prefix="/upload",
@@ -62,6 +62,9 @@ async def upload(
         )
 
     temp_dir = None
+    youtube_dir = None
+    media_path = None
+    transcript_text = None
 
     try:
 
@@ -83,13 +86,23 @@ async def upload(
         # YouTube URL Upload
         # -----------------------------
         else:
+            content = download_youtube_content(url)
 
-            media_path = download_youtube_audio(url)
+            if content["type"] == "transcript":
+                transcript_path = Path(content["path"])
+                transcript_text = transcript_path.read_text(
+                    encoding="utf-8",
+                )
+                youtube_dir = transcript_path.parent
+            else:
+                media_path = content["path"]
+                youtube_dir = Path(media_path).parent
 
         result = process_uploaded_file(
             db=db,
             conversation=conversation,
             file_path=media_path,
+            transcript_text=transcript_text,
         )
 
         return result
@@ -101,12 +114,9 @@ async def upload(
             shutil.rmtree(temp_dir, ignore_errors=True)
 
         # Delete downloaded YouTube folder
-        elif url:
+        elif youtube_dir:
             try:
-                shutil.rmtree(
-                    Path(media_path).parent,
-                    ignore_errors=True,
-                )
+                shutil.rmtree(youtube_dir, ignore_errors=True)
             except Exception:
                 pass
 

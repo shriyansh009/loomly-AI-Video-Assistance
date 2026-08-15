@@ -13,12 +13,32 @@ export async function askLLM(question: string, transcript: string, conversationI
   });
 }
 
+export function isYouTubeUrl(value: string): boolean {
+  const text = value.trim();
+  if (!text) return false;
+
+  try {
+    const url = new URL(text);
+    const host = url.hostname.toLowerCase().replace(/^www\./, "");
+    return (
+      host === "youtube.com" ||
+      host === "m.youtube.com" ||
+      host === "youtu.be" ||
+      host.endsWith(".youtube.com")
+    );
+  } catch {
+    return false;
+  }
+}
+
 export async function uploadFile(file: File, conversationId?: number) {
   const token = getToken();
   const formData = new FormData();
   formData.append("file", file);
 
-  const response = await fetch(`${API_URL}/upload/`, {
+  const endpoint = conversationId ? `/upload/${conversationId}` : "/upload/";
+
+  const response = await fetch(`${API_URL}${endpoint}`, {
     method: "POST",
     body: formData,
     headers: token
@@ -31,6 +51,31 @@ export async function uploadFile(file: File, conversationId?: number) {
   if (!response.ok) {
     const error = await response.json().catch(() => ({}));
     throw new Error(error.detail || "Unable to upload file");
+  }
+
+  return response.json();
+}
+
+export async function uploadYouTubeUrl(url: string, conversationId?: number) {
+  const token = getToken();
+  const formData = new FormData();
+  formData.append("url", url);
+
+  const endpoint = conversationId ? `/upload/${conversationId}` : "/upload/";
+
+  const response = await fetch(`${API_URL}${endpoint}`, {
+    method: "POST",
+    body: formData,
+    headers: token
+      ? {
+          Authorization: `Bearer ${token}`,
+        }
+      : undefined,
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.detail || "Unable to process YouTube URL");
   }
 
   return response.json();
