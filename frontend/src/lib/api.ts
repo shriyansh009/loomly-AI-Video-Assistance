@@ -1,6 +1,6 @@
 export { login, signup, getCurrentUser, getDashboard } from "./auth";
 
-const API_URL = "http://127.0.0.1:8000";
+const API_URL = import.meta.env.VITE_API_URL ?? "http://127.0.0.1:8000";
 
 export async function askLLM(question: string, transcript: string, conversationId?: number) {
   return apiFetch("/LLM/ask", {
