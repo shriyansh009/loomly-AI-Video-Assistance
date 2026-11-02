@@ -6,7 +6,7 @@ passlib[bcrypt]
 python-jose[cryptography]
 python-dotenv
 pydantic
-
+psycopg
 
 # ── AI Meeting Assistant ── requirements.txt ──────────────────────────────────
 # Python >= 3.10 recommended
